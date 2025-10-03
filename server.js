@@ -34,8 +34,69 @@ module.exports = pool;
 // Get all users
 app.get("/users", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM tblUsers");
+    //const result = await pool.query("SELECT * FROM tblUsers");
+    const result = await pool.query(`
+      SELECT json_build_object(
+    'userid', ur.userid,
+    'name', ur.name,
+    'surname', ur.surname,
+    'contactinfo', ur.contactinfo,
+    'dateofrecording', ur.dateofrecording,
+    'email', ur.email,
+    'password', ur.password,
+    'id_passportnumber', ur.id_passportnumber,
+    'gender', ur.gender,
+    'dob', ur.dob,
+    'nationality', ur.nationality,
+    'address', json_build_object(
+        'addressid', ad.addressid,
+        'postaladdress', ad.postaladdress,
+        'postalcode', ad.postalcode,
+        'physicaladdress', ad.physicaladdress,
+        'physicalcode', ad.physicalcode
+    )
+) AS user_json
+FROM tblusers ur
+INNER JOIN tbluseraddresses ad ON ur.userid = ad.userid`
+    );
     console.log("Connected! Current time:");
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server Error");
+  }
+});
+
+// Get all patientData
+app.get("/patientData", async (req, res) => {
+  try {
+    //const result = await pool.query("SELECT * FROM tblUsers");
+    const result = await pool.query(`
+      SELECT json_build_object(
+    'userid', us.userid,
+    'name', us.name,
+    'surname', us.surname,
+    'contactinfo', us.contactinfo,
+    'email', us.email,
+    'id_passportnumber', us.id_passportnumber,
+    'gender', us.gender,
+    'dob', us.dob,
+    'nationality', us.nationality,
+    'appointments', COALESCE(
+      json_agg(
+        json_build_object(
+          'app_id', ap.app_id,
+          'practitionerid', ap.practitionerid,
+          'status', ap.status,
+          'notes', ap.notes
+        )
+      ) FILTER (WHERE ap.app_id IS NOT NULL), '[]'::json
+    )
+) AS patient
+FROM tblusers us
+LEFT JOIN tblappointments ap ON us.userid = ap.userid
+GROUP BY us.userid;`
+    );
     res.json(result.rows);
   } catch (err) {
     console.error(err);
