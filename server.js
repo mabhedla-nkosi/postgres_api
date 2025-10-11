@@ -40,7 +40,7 @@ app.get("/users", async (req, res) => {
     'userid', ur.userid,
     'name', ur.name,
     'surname', ur.surname,
-    'contactinfo', ur.contactinfo,
+    'phone', ur.contactinfo,
     'dateofrecording', ur.dateofrecording,
     'email', ur.email,
     'password', ur.password,
@@ -76,7 +76,7 @@ app.get("/patientData", async (req, res) => {
     'userid', us.userid,
     'name', us.name,
     'surname', us.surname,
-    'contactinfo', us.contactinfo,
+    'phone', us.contactinfo,
     'email', us.email,
     'id_passportnumber', us.id_passportnumber,
     'gender', us.gender,
@@ -103,6 +103,100 @@ GROUP BY us.userid;`
     res.status(500).send("Server Error");
   }
 });
+
+
+// Get a single patient's data by user ID
+app.get("/patientData/:id", async (req, res) => {
+  const { id } = req.params; // Extract user ID from the URL
+
+  try {
+    const result = await pool.query(`
+      SELECT json_build_object(
+        'userid', us.userid,
+        'name', us.name,
+        'surname', us.surname,
+        'phone', us.contactinfo,
+        'email', us.email,
+        'id_passportnumber', us.id_passportnumber,
+        'gender', us.gender,
+        'dob', us.dob,
+        'nationality', us.nationality,
+        'appointments', COALESCE(
+          json_agg(
+            json_build_object(
+              'app_id', ap.app_id,
+              'practitionerid', ap.practitionerid,
+              'status', ap.status,
+              'notes', ap.notes
+            )
+          ) FILTER (WHERE ap.app_id IS NOT NULL), '[]'::json
+        )
+      ) AS patient
+      FROM tblusers us
+      LEFT JOIN tblappointments ap ON us.userid = ap.userid
+      WHERE us.userid = $1
+      GROUP BY us.userid;
+    `, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    // Return just the patient object (not an array)
+    res.json(result.rows[0].patient);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server Error");
+  }
+});
+
+// Get a single patient's data by email
+app.get("/patientData/email/:email", async (req, res) => {
+  const { email } = req.params; // Extract email from the URL
+
+  try {
+    const result = await pool.query(`
+      SELECT json_build_object(
+        'userid', us.userid,
+        'name', us.name,
+        'surname', us.surname,
+        'phone', us.contactinfo,
+        'email', us.email,
+        'id_passportnumber', us.id_passportnumber,
+        'gender', us.gender,
+        'dob', us.dob,
+        'nationality', us.nationality,
+        'appointments', COALESCE(
+          json_agg(
+            json_build_object(
+              'app_id', ap.app_id,
+              'practitionerid', ap.practitionerid,
+              'status', ap.status,
+              'notes', ap.notes
+            )
+          ) FILTER (WHERE ap.app_id IS NOT NULL), '[]'::json
+        )
+      ) AS patient
+      FROM tblusers us
+      LEFT JOIN tblappointments ap ON us.userid = ap.userid
+      WHERE LOWER(us.email) = LOWER($1)
+      GROUP BY us.userid;
+    `, [email]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    res.json(result.rows[0].patient);
+
+  } catch (err) {
+    console.error("Error fetching patient by email:", err);
+    res.status(500).send("Server Error");
+  }
+});
+
+
 
 // Add a new user
 // app.post("/users", async (req, res) => {
