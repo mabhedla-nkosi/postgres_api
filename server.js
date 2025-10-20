@@ -67,6 +67,69 @@ INNER JOIN tbluseraddresses ad ON ur.userid = ad.userid`
   }
 });
 
+// Get medical aid details by user ID
+app.get("/medicalaid/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT json_build_object(
+        'medicalaidid', ma.medicalaidid,
+        'userid', ma.userid,
+        'medicalaidname', ma.medicalaidname,
+        'medicalnumber', ma.medicalnumber
+      ) AS medicalaid
+      FROM tblmedicalaid ma
+      WHERE ma.userid = $1
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "No medical aid found for this user." });
+    }
+
+    res.json(result.rows[0].medicalaid);
+  } catch (err) {
+    console.error("Error fetching medical aid:", err);
+    res.status(500).send("Server Error");
+  }
+});
+
+// Get user address details by user ID
+app.get("/useraddress/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT json_build_object(
+        'addressid', ua.addressid,
+        'userid', ua.userid,
+        'postaladdress', ua.postaladdress,
+        'postalcode', ua.postalcode,
+        'physicaladdress', ua.physicaladdress,
+        'physicalcode', ua.physicalcode
+      ) AS useraddress
+      FROM tbluseraddresses ua
+      WHERE ua.userid = $1
+      `,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "No address found for this user." });
+    }
+
+    res.json(result.rows[0].useraddress);
+  } catch (err) {
+    console.error("Error fetching user address:", err);
+    res.status(500).send("Server Error");
+  }
+});
+
+
 // Get all patientData
 app.get("/patientData", async (req, res) => {
   try {
@@ -83,19 +146,87 @@ app.get("/patientData", async (req, res) => {
     'dob', us.dob,
     'nationality', us.nationality,
     'appointments', COALESCE(
-      json_agg(
-        json_build_object(
-          'app_id', ap.app_id,
-          'practitionerid', ap.practitionerid,
-          'status', ap.status,
-          'notes', ap.notes
+          json_agg(
+            json_build_object(
+              'app_id', ap.app_id,
+              'practitionerid', ap.practitionerid,
+              'status', ap.status,
+              'notes', ap.notes,
+              'date', ap.date,
+              'practitioner_occupation', pr.occupation,
+              'practicenumber', pr.practicenumber,
+              'statutorycouncil', pr.statutorycouncil,
+              'practitioner_userid', pru.userid,
+              'practitioner_name', pru.name,
+              'practitioner_surname', pru.surname,
+              'title',pr.title
+            )
+              ORDER BY ap.date DESC
+          ) FILTER (WHERE ap.app_id IS NOT NULL), '[]'::json
+        ),
+        'vitals', COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'vitalid', vt.vitalid,
+                'systolic', vt.systolic,
+                'diastolic', vt.diastolic,
+                'heartrate', vt.heartrate,
+                'temperature', vt.temperature,
+                'vitalsdate', vt.vitalsdate,
+                'practitionerid', vt.practitionerid,
+                'practitioner_occupation', vpr.occupation,
+                'practitioner_userid', vru.userid,
+                'practitioner_name', vru.name,
+                'practitioner_surname', vru.surname,
+                'title', vpr.title
+              )
+              ORDER BY vt.vitalsdate DESC
+            )
+            FROM tblvitals vt
+            LEFT JOIN tblpractitioner vpr ON vt.practitionerid = vpr.practitionerid
+            LEFT JOIN tblusers vru ON vpr.userid = vru.userid
+            WHERE vt.userid = us.userid
+          ),
+          '[]'::json
+        ),
+        'medication', COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'medicationid', md.medicationid,
+                'medicationname', md.medicationname,
+                'dosage', md.dosage,
+                'userid', md.userid,
+                'frequency', md.frequency
+              )
+              ORDER BY md.medicationid DESC
+            )
+            FROM tblmedication md
+            WHERE md.userid = us.userid
+          ),
+          '[]'::json
+        ),
+        'conditions', COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'conditionid', c.conditionid,
+                'conditionname', c.conditionname,
+                'diagnosisdate', c.diagnosisdate
+              )
+            )
+            FROM tblconditions c
+            WHERE c.userid = us.userid
+          ),
+          '[]'::json
         )
-      ) FILTER (WHERE ap.app_id IS NOT NULL), '[]'::json
-    )
-) AS patient
-FROM tblusers us
-LEFT JOIN tblappointments ap ON us.userid = ap.userid
-GROUP BY us.userid;`
+      ) AS patient
+      FROM tblusers us
+      LEFT JOIN tblappointments ap ON us.userid = ap.userid
+      LEFT JOIN tblpractitioner pr ON ap.practitionerid = pr.practitionerid
+      LEFT JOIN tblusers pru ON pr.userid = pru.userid
+      GROUP BY us.userid;`
     );
     res.json(result.rows);
   } catch (err) {
@@ -127,13 +258,81 @@ app.get("/patientData/:id", async (req, res) => {
               'app_id', ap.app_id,
               'practitionerid', ap.practitionerid,
               'status', ap.status,
-              'notes', ap.notes
+              'notes', ap.notes,
+              'date', ap.date,
+              'practitioner_occupation', pr.occupation,
+              'practicenumber', pr.practicenumber,
+              'statutorycouncil', pr.statutorycouncil,
+              'practitioner_userid', pru.userid,
+              'practitioner_name', pru.name,
+              'practitioner_surname', pru.surname,
+              'title',pr.title
             )
+              ORDER BY ap.date DESC
           ) FILTER (WHERE ap.app_id IS NOT NULL), '[]'::json
+        ),
+        'vitals', COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'vitalid', vt.vitalid,
+                'systolic', vt.systolic,
+                'diastolic', vt.diastolic,
+                'heartrate', vt.heartrate,
+                'temperature', vt.temperature,
+                'vitalsdate', vt.vitalsdate,
+                'practitionerid', vt.practitionerid,
+                'practitioner_occupation', vpr.occupation,
+                'practitioner_userid', vru.userid,
+                'practitioner_name', vru.name,
+                'practitioner_surname', vru.surname,
+                'title', vpr.title
+              )
+              ORDER BY vt.vitalsdate DESC
+            )
+            FROM tblvitals vt
+            LEFT JOIN tblpractitioner vpr ON vt.practitionerid = vpr.practitionerid
+            LEFT JOIN tblusers vru ON vpr.userid = vru.userid
+            WHERE vt.userid = us.userid
+          ),
+          '[]'::json
+        ),
+        'medication', COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'medicationid', md.medicationid,
+                'medicationname', md.medicationname,
+                'dosage', md.dosage,
+                'userid', md.userid,
+                'frequency', md.frequency
+              )
+              ORDER BY md.medicationid DESC
+            )
+            FROM tblmedication md
+            WHERE md.userid = us.userid
+          ),
+          '[]'::json
+        ),
+        'conditions', COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'conditionid', c.conditionid,
+                'conditionname', c.conditionname,
+                'diagnosisdate', c.diagnosisdate
+              )
+            )
+            FROM tblconditions c
+            WHERE c.userid = us.userid
+          ),
+          '[]'::json
         )
       ) AS patient
       FROM tblusers us
       LEFT JOIN tblappointments ap ON us.userid = ap.userid
+      LEFT JOIN tblpractitioner pr ON ap.practitionerid = pr.practitionerid
+      LEFT JOIN tblusers pru ON pr.userid = pru.userid
       WHERE us.userid = $1
       GROUP BY us.userid;
     `, [id]);
@@ -173,13 +372,81 @@ app.get("/patientData/email/:email", async (req, res) => {
               'app_id', ap.app_id,
               'practitionerid', ap.practitionerid,
               'status', ap.status,
-              'notes', ap.notes
+              'notes', ap.notes,
+              'date', ap.date,
+              'practitioner_occupation', pr.occupation,
+              'practicenumber', pr.practicenumber,
+              'statutorycouncil', pr.statutorycouncil,
+              'practitioner_userid', pru.userid,
+              'practitioner_name', pru.name,
+              'practitioner_surname', pru.surname,
+              'title',pr.title
             )
+              ORDER BY ap.date DESC
           ) FILTER (WHERE ap.app_id IS NOT NULL), '[]'::json
+        ),
+        'vitals', COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'vitalid', vt.vitalid,
+                'systolic', vt.systolic,
+                'diastolic', vt.diastolic,
+                'heartrate', vt.heartrate,
+                'temperature', vt.temperature,
+                'vitalsdate', vt.vitalsdate,
+                'practitionerid', vt.practitionerid,
+                'practitioner_occupation', vpr.occupation,
+                'practitioner_userid', vru.userid,
+                'practitioner_name', vru.name,
+                'practitioner_surname', vru.surname,
+                'title', vpr.title
+              )
+              ORDER BY vt.vitalsdate DESC
+            )
+            FROM tblvitals vt
+            LEFT JOIN tblpractitioner vpr ON vt.practitionerid = vpr.practitionerid
+            LEFT JOIN tblusers vru ON vpr.userid = vru.userid
+            WHERE vt.userid = us.userid
+          ),
+          '[]'::json
+        ),
+        'medication', COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'medicationid', md.medicationid,
+                'medicationname', md.medicationname,
+                'dosage', md.dosage,
+                'userid', md.userid,
+                'frequency', md.frequency
+              )
+              ORDER BY md.medicationid DESC
+            )
+            FROM tblmedication md
+            WHERE md.userid = us.userid
+          ),
+          '[]'::json
+        ),
+        'conditions', COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'conditionid', c.conditionid,
+                'conditionname', c.conditionname,
+                'diagnosisdate', c.diagnosisdate
+              )
+            )
+            FROM tblconditions c
+            WHERE c.userid = us.userid
+          ),
+          '[]'::json
         )
       ) AS patient
       FROM tblusers us
       LEFT JOIN tblappointments ap ON us.userid = ap.userid
+      LEFT JOIN tblpractitioner pr ON ap.practitionerid = pr.practitionerid
+      LEFT JOIN tblusers pru ON pr.userid = pru.userid
       WHERE LOWER(us.email) = LOWER($1)
       GROUP BY us.userid;
     `, [email]);
