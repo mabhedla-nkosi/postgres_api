@@ -137,6 +137,7 @@ app.get("/patientData", async (req, res) => {
     const result = await pool.query(`
       SELECT json_build_object(
     'userid', us.userid,
+    'medicalNumber', us.userid,
     'name', us.name,
     'surname', us.surname,
     'phone', us.contactinfo,
@@ -244,6 +245,7 @@ app.get("/patientData/:id", async (req, res) => {
     const result = await pool.query(`
       SELECT json_build_object(
         'userid', us.userid,
+        'medicalNumber', us.userid,
         'name', us.name,
         'surname', us.surname,
         'phone', us.contactinfo,
@@ -358,6 +360,7 @@ app.get("/patientData/email/:email", async (req, res) => {
     const result = await pool.query(`
       SELECT json_build_object(
         'userid', us.userid,
+        'medicalNumber', us.userid,
         'name', us.name,
         'surname', us.surname,
         'phone', us.contactinfo,
