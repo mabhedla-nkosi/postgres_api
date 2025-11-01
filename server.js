@@ -466,6 +466,70 @@ app.get("/patientData/email/:email", async (req, res) => {
   }
 });
 
+// PUT /medicalaid/update
+app.put("/medicalaid/update", async (req, res) => {
+  const { medicalaidname, medicalnumber, userid, medicalaidid } = req.body;
+
+  if (!medicalaidid || !userid) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE tblmedicalaid
+      SET medicalaidname = $1,
+          medicalnumber = $2,
+          userid = $3
+      WHERE medicalaidid = $4
+      RETURNING *;
+      `,
+      [medicalaidname, medicalnumber, userid, medicalaidid]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Medical aid record not found" });
+    }
+
+    res.status(200).json({
+      message: "Medical aid updated successfully",
+      data: result.rows[0],
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// PUT /useraddress/update
+app.put("/useraddress/update", async (req, res) => {
+  const { addressid, userid, postaladdress, postalcode, physicaladdress, physicalcode } = req.body;
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE tbluseraddresses
+      SET postaladdress = $1,
+          postalcode = $2,
+          physicaladdress = $3,
+          physicalcode = $4
+      WHERE addressid = $5 AND userid = $6
+      RETURNING *;
+      `,
+      [postaladdress, postalcode, physicaladdress, physicalcode, addressid, userid]
+    );
+
+    if (result.rowCount === 0)
+      return res.status(404).json({ message: "Address not found" });
+
+    res.status(200).json({
+      message: "Address updated successfully",
+      data: result.rows[0],
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
 
 
 // Add a new user
