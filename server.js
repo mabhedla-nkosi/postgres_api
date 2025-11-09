@@ -67,6 +67,7 @@ INNER JOIN tbluseraddresses ad ON ur.userid = ad.userid`
   }
 });
 
+
 // Get medical aid details by user ID
 app.get("/medicalaid/:id", async (req, res) => {
   const { id } = req.params;
