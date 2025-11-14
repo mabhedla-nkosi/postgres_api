@@ -67,6 +67,84 @@ INNER JOIN tbluseraddresses ad ON ur.userid = ad.userid`
   }
 });
 
+app.get("/users/:userid", async (req, res) => {
+  try {
+    const { userid } = req.params;
+
+    const result = await pool.query(
+      `
+      SELECT json_build_object(
+        'userid', ur.userid,
+        'name', ur.name,
+        'surname', ur.surname,
+        'phone', ur.contactinfo,
+        'email', ur.email,
+        'password', ur.password,
+        'id_passportnumber', ur.id_passportnumber,
+        'gender', ur.gender,
+        'dob', ur.dob,
+        'nationality', ur.nationality
+      ) AS user_json
+      FROM tblusers ur
+      WHERE ur.userid = $1
+      `,
+      [userid]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server Error");
+  }
+});
+
+app.put('/updateUserAccount/:userId', async (req, res) => {
+  const userId = parseInt(req.params.userId);
+  const {
+    name, surname, phone, email,
+    password, id_passportnumber,
+    gender, dob, nationality
+  } = req.body;
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE tblusers
+      SET
+        name = $1,
+        surname = $2,
+        contactinfo = $3,
+        email = $4,
+        password = $5,
+        id_passportnumber = $6,
+        gender = $7,
+        dob = $8,
+        nationality = $9
+      WHERE userid = $10
+      RETURNING *;
+      `,
+      [name, surname, phone, email, password, id_passportnumber, gender, dob, nationality, userId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.status(200).json({
+      message: 'User account updated successfully',
+      user: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating user account:', error);
+    res.status(500).json({ message: 'Error updating user account', error: error.message });
+  }
+});
+
+
 
 // Get medical aid details by user ID
 app.get("/medicalaid/:id", async (req, res) => {
@@ -129,6 +207,53 @@ app.get("/useraddress/:id", async (req, res) => {
     res.status(500).send("Server Error");
   }
 });
+
+
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // Check if user exists
+    const result = await pool.query(
+      `
+      SELECT json_build_object(
+        'userid', u.userid,
+        'name', u.name,
+        'surname', u.surname,
+        'email', u.email,
+        'phone', u.contactinfo,
+        'gender', u.gender,
+        'dob', u.dob,
+        'nationality', u.nationality
+      ) AS user
+      FROM tblusers u
+      WHERE u.email = $1 AND u.password = $2
+      `,
+      [email, password]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ success: false, message: "Invalid email or password" });
+    }
+
+    const user = result.rows[0].user;
+
+    // Optional: create JWT token for session management
+    // const token = jwt.sign({ userid: user.userid }, process.env.JWT_SECRET, { expiresIn: '2h' });
+
+    res.json({
+      success: true,
+      message: "Login successful",
+      user, // return user object
+      // token, // include if you use JWT
+    });
+
+  } catch (err) {
+    console.error("Error logging in:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 
 
 // Get all patientData
@@ -469,68 +594,98 @@ app.get("/patientData/email/:email", async (req, res) => {
 
 // PUT /medicalaid/update
 app.put("/medicalaid/update", async (req, res) => {
-  const { medicalaidname, medicalnumber, userid, medicalaidid } = req.body;
+    const { medicalaidname, medicalnumber, userid, medicalaidid } = req.body;
 
-  if (!medicalaidid || !userid) {
-    return res.status(400).json({ message: "Missing required fields" });
-  }
-
-  try {
-    const result = await pool.query(
-      `
-      UPDATE tblmedicalaid
-      SET medicalaidname = $1,
-          medicalnumber = $2,
-          userid = $3
-      WHERE medicalaidid = $4
-      RETURNING *;
-      `,
-      [medicalaidname, medicalnumber, userid, medicalaidid]
-    );
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: "Medical aid record not found" });
+    if (!medicalaidid || !userid) {
+      return res.status(400).json({ message: "Missing required fields" });
     }
 
-    res.status(200).json({
-      message: "Medical aid updated successfully",
-      data: result.rows[0],
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
+    try {
+      const result = await pool.query(
+        `
+        UPDATE tblmedicalaid
+        SET medicalaidname = $1,
+            medicalnumber = $2,
+            userid = $3
+        WHERE medicalaidid = $4
+        RETURNING *;
+        `,
+        [medicalaidname, medicalnumber, userid, medicalaidid]
+      );
 
-// PUT /useraddress/update
-app.put("/useraddress/update", async (req, res) => {
-  const { addressid, userid, postaladdress, postalcode, physicaladdress, physicalcode } = req.body;
+      if (result.rowCount === 0) {
+        return res.status(404).json({ message: "Medical aid record not found" });
+      }
 
-  try {
-    const result = await pool.query(
-      `
-      UPDATE tbluseraddresses
-      SET postaladdress = $1,
-          postalcode = $2,
-          physicaladdress = $3,
-          physicalcode = $4
-      WHERE addressid = $5 AND userid = $6
-      RETURNING *;
-      `,
-      [postaladdress, postalcode, physicaladdress, physicalcode, addressid, userid]
-    );
+      res.status(200).json({
+        message: "Medical aid updated successfully",
+        data: result.rows[0],
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
+  });
 
-    if (result.rowCount === 0)
-      return res.status(404).json({ message: "Address not found" });
+  // PUT /useraddress/update
+  app.put("/useraddress/update", async (req, res) => {
+    const { addressid, userid, postaladdress, postalcode, physicaladdress, physicalcode } = req.body;
 
-    res.status(200).json({
-      message: "Address updated successfully",
-      data: result.rows[0],
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
+    try {
+      const result = await pool.query(
+        `
+        UPDATE tbluseraddresses
+        SET postaladdress = $1,
+            postalcode = $2,
+            physicaladdress = $3,
+            physicalcode = $4
+        WHERE addressid = $5 AND userid = $6
+        RETURNING *;
+        `,
+        [postaladdress, postalcode, physicaladdress, physicalcode, addressid, userid]
+      );
+
+      if (result.rowCount === 0)
+        return res.status(404).json({ message: "Address not found" });
+
+      res.status(200).json({
+        message: "Address updated successfully",
+        data: result.rows[0],
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
+  });
+
+app.put("/updateUserName", async (req, res) => {
+    const { userid, name } = req.body;
+
+    if (!userid || !name) {
+      return res.status(400).json({ success: false, message: "Missing fields" });
+    }
+
+    try {
+      const result = await pool.query(
+        `
+        UPDATE tblusers
+        SET name = $1
+        WHERE userid = $2
+        RETURNING userid, name;
+        `,
+        [name, userid]
+      );
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+
+      res.json({ success: true, user: result.rows[0] });
+    } catch (err) {
+      console.error("Error updating name:", err);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  });
+
 
 
 // Add a new user
